@@ -13,6 +13,12 @@ const categories = [
   { id: 'selfDirection', label: '自己決定', color: '#7696bb', icon: '◎', questions: ['自分が本当に大事にしたいことがわかる', '周りの期待と自分の希望を分けて考えられる', '決めたことを小さな行動に移せる', '「やらないこと」を選ぶ勇気がある', '自分のペースを大切にできる'] },
 ];
 const values = ['人の気持ちを理解できる人', '自分の好奇心を信じられる人', 'しなやかに前へ進める人', '自分の軸で選べる人'];
+const goalWeights = {
+  '人の気持ちを理解できる人': [1.45, 0.85, 0.85, 0.85],
+  '自分の好奇心を信じられる人': [0.85, 1.45, 0.85, 0.85],
+  'しなやかに前へ進める人': [0.85, 0.85, 1.45, 0.85],
+  '自分の軸で選べる人': [0.85, 0.85, 0.85, 1.45],
+};
 const initialAnswers = Array(20).fill(null);
 const STORAGE_KEY = 'selfcompass-state';
 const defaultLogs = [{ text: '朝の会議で、相手の意見を最後まで聞けた', tag: '協調性', date: '今日' }];
@@ -79,7 +85,8 @@ function App() {
     return answered.length ? Math.round(answered.reduce((sum, value) => sum + value, 0) / 5 * 20) : 0;
   });
   const scores = scoreOverrides || calculatedScores;
-  const average = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  const weights = goalWeights[goal] || [1, 1, 1, 1];
+  const average = Math.round(scores.reduce((sum, score, index) => sum + score * weights[index], 0) / weights.reduce((sum, weight) => sum + weight, 0));
   const goalCategory = categories.find((category) => category.label === goal.replace('自分の軸で選べる人', '自己決定').replace('人の気持ちを理解できる人', '協調性').replace('自分の好奇心を信じられる人', '好奇心').replace('しなやかに前へ進める人', '回復力')) || categories[3];
   const updateAnswer = (index, value) => {
     if (diagnosisLocked) return;
