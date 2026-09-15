@@ -13,7 +13,7 @@ const categories = [
   { id: 'selfDirection', label: '自己決定', color: '#7696bb', icon: '◎', questions: ['自分が本当に大事にしたいことがわかる', '周りの期待と自分の希望を分けて考えられる', '決めたことを小さな行動に移せる', '「やらないこと」を選ぶ勇気がある', '自分のペースを大切にできる'] },
 ];
 const values = ['人の気持ちを理解できる人', '自分の好奇心を信じられる人', 'しなやかに前へ進める人', '自分の軸で選べる人'];
-const initialAnswers = Array(20).fill(3);
+const initialAnswers = Array(20).fill(null);
 const STORAGE_KEY = 'selfcompass-state';
 const defaultLogs = [{ text: '朝の会議で、相手の意見を最後まで聞けた', tag: '協調性', date: '今日' }];
 const supabase = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -32,8 +32,10 @@ function loadSavedState() {
 }
 
 function App() {
-  const [active, setActive] = useState('diagnosis');
   const savedState = loadSavedState();
+  const [onboardingCompleted, setOnboardingCompleted] = useState(Boolean(savedState.onboardingCompleted));
+  const [diagnosisLocked, setDiagnosisLocked] = useState(Boolean(savedState.diagnosisCompleted));
+  const [active, setActive] = useState(onboardingCompleted ? 'diagnosis' : 'goal');
   const [answers, setAnswers] = useState(savedState.answers);
   const [goal, setGoal] = useState(savedState.goal);
   const [note, setNote] = useState('');
@@ -69,13 +71,35 @@ function App() {
     supabase.from('profiles').upsert({ id: user.id, goal, answers, logs, ai_scores: scoreOverrides, updated_at: new Date().toISOString() }).then();
   }, [answers, goal, logs, scoreOverrides, user, cloudReady]);
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ answers, goal, logs, aiScores: scoreOverrides }));
-  }, [answers, goal, logs, scoreOverrides]);
-  const calculatedScores = categories.map((category, index) => Math.round(answers.slice(index * 5, index * 5 + 5).reduce((sum, value) => sum + value, 0) / 5 * 20));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ answers, goal, logs, aiScores: scoreOverrides, onboardingCompleted, diagnosisCompleted: diagnosisLocked }));
+  }, [answers, goal, logs, scoreOverrides, onboardingCompleted, diagnosisLocked]);
+  const calculatedScores = categories.map((category, index) => {
+    const categoryAnswers = answers.slice(index * 5, index * 5 + 5);
+    const answered = categoryAnswers.filter((value) => value !== null);
+    return answered.length ? Math.round(answered.reduce((sum, value) => sum + value, 0) / 5 * 20) : 0;
+  });
   const scores = scoreOverrides || calculatedScores;
   const average = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
   const goalCategory = categories.find((category) => category.label === goal.replace('自分の軸で選べる人', '自己決定').replace('人の気持ちを理解できる人', '協調性').replace('自分の好奇心を信じられる人', '好奇心').replace('しなやかに前へ進める人', '回復力')) || categories[3];
-  const updateAnswer = (index, value) => { setScoreOverrides(null); setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? value : answer)); };
+  const updateAnswer = (index, value) => {
+    if (diagnosisLocked) return;
+    setScoreOverrides(null);
+    setAnswers((current) => current.map((answer, answerIndex) => answerIndex === index ? value : answer));
+  };
+  const completeDiagnosis = () => {
+    if (answers.some((answer) => answer === null)) return;
+    setDiagnosisLocked(true);
+    setOnboardingCompleted(true);
+    setAuthMode('signup');
+    setAuthMessage('診断結果を保存するため、アカウントを作成してください。');
+    setAuthOpen(true);
+  };
+  const retakeDiagnosis = () => {
+    setAnswers(initialAnswers);
+    setScoreOverrides(null);
+    setDiagnosisLocked(false);
+    setActive('diagnosis');
+  };
   const addLog = async () => {
     if (!note.trim() || analyzing) return;
     const newLog = { text: note.trim(), tag: goalCategory.label, date: 'たった今' };
@@ -99,12 +123,12 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Compass size={21} strokeWidth={2.5} /></div><div><strong>self<span>compass</span></strong><small>自分を知り、育てる</small></div></div>
       <button className="profile-chip" onClick={() => setAuthOpen(true)}><div className="avatar">{user ? (user.email?.[0] || 'U').toUpperCase() : 'あ'}</div><div><b>{user ? user.email : 'ゲストモード'}</b><small>{user ? 'アカウントに保存中' : 'ログインすると端末間で同期'}</small></div><ChevronRight size={16} /></button>
-      <nav><p className="nav-label">MY JOURNEY</p><NavItem icon={<Target size={18} />} label="なりたい自分" active={active === 'goal'} onClick={() => setActive('goal')} /><NavItem icon={<Brain size={18} />} label="性格診断" active={active === 'diagnosis'} onClick={() => setActive('diagnosis')} /><NavItem icon={<TrendingUp size={18} />} label="成長の記録" active={active === 'growth'} onClick={() => setActive('growth')} /></nav>
+      {onboardingCompleted && <nav><p className="nav-label">MY JOURNEY</p><NavItem icon={<Target size={18} />} label="なりたい自分" active={active === 'goal'} onClick={() => setActive('goal')} /><NavItem icon={<Brain size={18} />} label="性格診断" active={active === 'diagnosis'} onClick={() => setActive('diagnosis')} /><NavItem icon={<TrendingUp size={18} />} label="成長の記録" active={active === 'growth'} onClick={() => setActive('growth')} /></nav>}
       <div className="side-bottom"><div className="streak"><Flame size={17} fill="#d2a94e" color="#d2a94e" /><span><b>3日</b> 続けています</span></div><div className="help-link"><CircleHelp size={17} />使い方を見る</div>{user && <button className="help-link logout-button" onClick={() => supabase.auth.signOut()}><LogOut size={17} />ログアウト</button>}</div>
     </aside>
     <main className="main-content">
       <header className="topbar"><div><span className="eyebrow">WEDNESDAY, JUNE 12</span><h1>自分の現在地を、<em>やさしく知る。</em></h1></div><button className="icon-button" aria-label="通知"><span className="notification-dot" />♡</button></header>
-      {active === 'diagnosis' && <Diagnosis scores={scores} average={average} answers={answers} updateAnswer={updateAnswer} />}
+      {active === 'diagnosis' && <Diagnosis scores={scores} average={average} answers={answers} locked={diagnosisLocked} updateAnswer={updateAnswer} onComplete={completeDiagnosis} onRetake={retakeDiagnosis} />}
       {active === 'goal' && <GoalView goal={goal} setGoal={setGoal} onGoDiagnosis={() => setActive('diagnosis')} />}
       {active === 'growth' && <GrowthView logs={logs} note={note} setNote={setNote} addLog={addLog} analyzing={analyzing} aiInsight={aiInsight} />}
     </main>
@@ -125,7 +149,7 @@ function AuthModal({ mode, setMode, message, setMessage, onClose }) {
   return <div className="modal-backdrop" onClick={onClose}><div className="auth-modal" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose} aria-label="閉じる"><X size={18} /></button><div className="modal-symbol">{mode === 'login' ? <LogIn size={20} /> : <UserPlus size={20} />}</div><h2>{mode === 'login' ? 'おかえりなさい' : 'コンパスを作る'}</h2><p>ログインすると、どの端末からでもあなたの記録を続きから使えます。</p><form onSubmit={submit}><label>メールアドレス<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>パスワード<input type="password" minLength="6" value={password} onChange={(event) => setPassword(event.target.value)} required /></label><button className="primary-button auth-submit" type="submit">{mode === 'login' ? 'ログイン' : 'アカウントを作成'}</button></form>{message && <div className="auth-message">{message}</div>}<button className="mode-switch" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'はじめて使う方はこちら' : 'ログインはこちら'}</button></div></div>;
 }
 function NavItem({ icon, label, active, onClick }) { return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <i />}</button>; }
-function Diagnosis({ scores, average, answers, updateAnswer }) { return <section className="page-section"><div className="section-intro"><div><span className="eyebrow">STEP 02 / 03</span><h2>性格のレーダーを<br /><em>描いてみよう。</em></h2></div><span className="completion">{answers.length} / 20 <small>answered</small></span></div><div className="score-overview"><div className="score-number"><strong>{average}</strong><span>/ 100</span><small>あなたの現在の総合スコア</small></div><Radar scores={scores} /></div><div className="category-list">{categories.map((category, categoryIndex) => <div className="category-card" key={category.id}><div className="category-title"><span className="category-icon" style={{ color: category.color }}>{category.icon}</span><b>{category.label}</b><span className="category-score" style={{ color: category.color }}>{scores[categoryIndex]}<small>/100</small></span></div><div className="mini-bar"><span style={{ width: `${scores[categoryIndex]}%`, background: category.color }} /></div><div className="questions">{category.questions.map((question, questionIndex) => { const index = categoryIndex * 5 + questionIndex; return <div className="question" key={question}><span>{question}</span><div className="scale">{[1, 2, 3, 4, 5].map((value) => <button key={value} className={answers[index] === value ? 'selected' : ''} onClick={() => updateAnswer(index, value)} aria-label={`${value}点`}>{value}</button>)}</div></div>; })}</div></div>)}</div></section>; }
+function Diagnosis({ scores, average, answers, locked, updateAnswer, onComplete, onRetake }) { const answeredCount = answers.filter((answer) => answer !== null).length; const complete = answeredCount === answers.length; return <section className="page-section"><div className="section-intro"><div><span className="eyebrow">STEP 02 / 03</span><h2>性格のレーダーを<br /><em>描いてみよう。</em></h2></div><span className="completion">{answeredCount} / 20 <small>answered</small></span></div><div className="score-overview"><div className="score-number"><strong>{average}</strong><span>/ 100</span><small>あなたの現在の総合スコア</small></div><Radar scores={scores} /></div><div className="category-list">{categories.map((category, categoryIndex) => <div className="category-card" key={category.id}><div className="category-title"><span className="category-icon" style={{ color: category.color }}>{category.icon}</span><b>{category.label}</b><span className="category-score" style={{ color: category.color }}>{scores[categoryIndex]}<small>/100</small></span></div><div className="mini-bar"><span style={{ width: `${scores[categoryIndex]}%`, background: category.color }} /></div><div className="questions">{category.questions.map((question, questionIndex) => { const index = categoryIndex * 5 + questionIndex; return <div className="question" key={question}><span>{question}</span><div className="scale">{[1, 2, 3, 4, 5].map((value) => <button key={value} disabled={locked} className={answers[index] === value ? 'selected' : ''} onClick={() => updateAnswer(index, value)} aria-label={`${value}点`}>{value}</button>)}</div></div>; })}</div></div>)}</div><div className="diagnosis-actions">{locked ? <><span>診断結果は保存されています</span><button className="secondary-button" onClick={onRetake}>アンケートを受け直す</button></> : <button className="primary-button" disabled={!complete} onClick={onComplete}>診断を完了してログイン <ArrowRight size={17} /></button>}</div></section>; }
 function Radar({ scores }) { const points = scores.map((score, index) => { const angle = -Math.PI / 2 + (Math.PI * 2 * index) / 4; const radius = 75 * (score / 100); return `${100 + Math.cos(angle) * radius},${100 + Math.sin(angle) * radius}`; }).join(' '); return <div className="radar-wrap"><svg viewBox="0 0 200 200" className="radar"><polygon points="100,25 175,100 100,175 25,100" fill="none" stroke="#d9ded8" /><polygon points="100,50 150,100 100,150 50,100" fill="none" stroke="#e6eae4" /><polygon points="100,75 125,100 100,125 75,100" fill="none" stroke="#e6eae4" /><line x1="100" y1="25" x2="100" y2="175" stroke="#e6eae4" /><line x1="25" y1="100" x2="175" y2="100" stroke="#e6eae4" /><polygon points={points} fill="rgba(95,158,144,.2)" stroke="#5f9e90" strokeWidth="2" /></svg><span className="radar-label top">協調性</span><span className="radar-label right">好奇心</span><span className="radar-label bottom">回復力</span><span className="radar-label left">自己決定</span></div>; }
 function GoalView({ goal, setGoal, onGoDiagnosis }) { return <section className="page-section simple-view"><span className="eyebrow">STEP 01 / 03</span><h2>どんな自分に、<br /><em>近づきたい？</em></h2><p className="lead">正解を選ぶ必要はありません。今のあなたが、少し心惹かれる言葉を選んでください。</p><div className="goal-grid">{values.map((value, index) => <button className={`goal-option ${goal === value ? 'chosen' : ''}`} key={value} onClick={() => setGoal(value)}><span>0{index + 1}</span><b>{value}</b>{goal === value && <Check size={18} />}</button>)}</div><div className="goal-footer"><span><Heart size={16} />選んだ目標はいつでも変えられます</span><button className="primary-button" onClick={onGoDiagnosis}>診断へ進む <ArrowRight size={17} /></button></div></section>; }
 function GrowthView({ logs, note, setNote, addLog, analyzing, aiInsight }) { return <section className="page-section simple-view growth-view"><span className="eyebrow">STEP 03 / 03</span><h2>小さな変化を、<br /><em>ちゃんと残す。</em></h2><p className="lead">できたことは、あなたの性格を育てる証拠。短い言葉で記録しておきましょう。</p><div className="log-composer"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="今日できたことを書いてみる..." /><div className="composer-footer"><span>例：苦手な人にも、まず挨拶できた</span><button className="primary-button" onClick={addLog} disabled={analyzing}>{analyzing ? 'AIが分析中...' : <><Plus size={17} />記録して分析</>}</button></div></div>{aiInsight && <div className={`ai-result ${aiInsight.error ? 'error' : ''}`}><div className="ai-result-title"><Sparkles size={16} /><b>{aiInsight.error ? 'AI分析を利用できませんでした' : `${aiInsight.category}の進歩を発見`}</b></div><p>{aiInsight.error || aiInsight.progress}</p>{!aiInsight.error && <small>次の一歩：{aiInsight.tip}</small>}</div>}<div className="log-list"><div className="list-heading"><b>あなたの成長ログ</b><span>{logs.length} records</span></div>{logs.map((log, index) => <div className="log-item" key={`${log.text}-${index}`}><div className="log-check"><Check size={15} /></div><div><p>{log.text}</p><span>{log.date} · <b>{log.tag}</b></span></div></div>)}</div></section>; }
