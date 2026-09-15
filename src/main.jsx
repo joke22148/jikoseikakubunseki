@@ -12,12 +12,12 @@ const categories = [
   { id: 'resilience', label: 'メンタル', color: '#d2a94e', icon: '↗', questions: ['うまくいかない時も、次の一歩を考えられる', '気持ちを切り替える自分なりの方法がある', '小さな進歩にも気づくことができる', '助けを求めることをためらわない', '失敗を次に活かす材料として捉えられる'] },
   { id: 'selfDirection', label: '自信', color: '#7696bb', icon: '◎', questions: ['自分が本当に大事にしたいことがわかる', '周りの期待と自分の希望を分けて考えられる', '決めたことを小さな行動に移せる', '「やらないこと」を選ぶ勇気がある', '自分のペースを大切にできる'] },
 ];
-const values = ['人の気持ちを理解できる人', 'リーダーシップを発揮できる人', 'しなやかに前へ進める人', '自分の軸で選べる人'];
+const values = ['人の気持ちを理解できる人', 'リーダーシップを発揮できる人', 'しなやかに前へ進める人', 'メンタルが強い人'];
 const goalWeights = {
   '人の気持ちを理解できる人': [1.45, 0.85, 0.85, 0.85],
   'リーダーシップを発揮できる人': [0.85, 1.45, 0.85, 0.85],
   'メンタルの強い人': [0.85, 0.85, 1.45, 0.85],
-  '自信のある人': [0.85, 0.85, 0.85, 1.45],
+  'しなやかに前へ進める人': [0.85, 0.85, 1.45, 0.85],
 };
 const initialAnswers = Array(20).fill(null);
 const STORAGE_KEY = 'selfcompass-state';
@@ -87,7 +87,7 @@ function App() {
   const scores = scoreOverrides || calculatedScores;
   const weights = goalWeights[goal] || [1, 1, 1, 1];
   const average = Math.round(scores.reduce((sum, score, index) => sum + score * weights[index], 0) / weights.reduce((sum, weight) => sum + weight, 0));
-  const goalCategory = categories.find((category) => category.label === goal.replace('自分の軸で選べる人', '自信').replace('人の気持ちを理解できる人', '協調性').replace('リーダーシップを発揮できる人', 'リーダーシップ').replace('しなやかに前へ進める人', 'メンタル')) || categories[3];
+  const goalCategory = categories.find((category) => category.label === goal.replace('メンタルが強い人', 'メンタル').replace('人の気持ちを理解できる人', '協調性').replace('リーダーシップを発揮できる人', 'リーダーシップ').replace('しなやかに前へ進める人', 'メンタル')) || categories[3];
   const updateAnswer = (index, value) => {
     if (diagnosisLocked) return;
     setScoreOverrides(null);
