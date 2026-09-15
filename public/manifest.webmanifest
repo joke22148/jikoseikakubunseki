@@ -1,0 +1,18 @@
+{
+  "name": "Self Compass | 自分を知り、育てる",
+  "short_name": "Self Compass",
+  "description": "自分を知り、育てる自己分析アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f2",
+  "theme_color": "#f6f7f2",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
